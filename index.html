@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#8f352c" />
+    <title>Contas do casamento | Leonardo & Bruna</title>
+    <link rel="stylesheet" href="styles.css?v=2" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="header-inner">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">L&B</span>
+          <div><strong>Leonardo & Bruna</strong><span>Contas do casamento</span></div>
+        </div>
+        <div class="header-actions">
+          <span class="save-status" id="saveStatus">Carregando dados...</span>
+          <button class="button secondary" type="button" id="backupButton">Baixar backup</button>
+          <button class="button primary" type="button" id="newVendorButton">+ Novo fornecedor</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="app-shell">
+      <section class="summary-strip" aria-label="Resumo financeiro">
+        <article><span>Total contratado</span><strong id="totalContracted">R$ 0,00</strong></article>
+        <article><span>Já pago</span><strong id="totalPaid">R$ 0,00</strong><small id="paidPercent">0% do total</small></article>
+        <article><span>Saldo a pagar</span><strong id="totalPending">R$ 0,00</strong></article>
+        <article class="next-payment"><span>Próximo vencimento</span><strong id="nextPayment">Tudo pago</strong><small id="daysToWedding"></small></article>
+      </section>
+
+      <nav class="tabs" aria-label="Seções">
+        <button class="tab is-active" type="button" data-tab="month">Visão mensal</button>
+        <button class="tab" type="button" data-tab="vendors">Fornecedores</button>
+        <button class="tab" type="button" data-tab="overview">Resumo geral</button>
+        <button class="tab" type="button" data-tab="report">Relatório total</button>
+        <button class="tab" type="button" data-tab="settings">Dados e backup</button>
+      </nav>
+
+      <section class="tab-panel is-active" id="monthPanel" data-panel="month">
+        <div class="section-heading">
+          <div><p class="eyebrow">Agenda financeira</p><h1 id="monthTitle">Contas do mês</h1></div>
+          <div class="month-picker">
+            <button class="icon-button" id="prevMonth" type="button" aria-label="Mês anterior">‹</button>
+            <input id="monthInput" type="month" aria-label="Escolher mês" />
+            <button class="icon-button" id="nextMonth" type="button" aria-label="Próximo mês">›</button>
+            <button class="button secondary compact" id="todayButton" type="button">Hoje</button>
+          </div>
+        </div>
+
+        <div class="month-metrics">
+          <article><span>Previsto no mês</span><strong id="monthTotal">R$ 0,00</strong></article>
+          <article class="positive"><span>Pago no mês</span><strong id="monthPaid">R$ 0,00</strong></article>
+          <article><span>Pendente</span><strong id="monthPending">R$ 0,00</strong></article>
+          <article class="negative"><span>Atrasado</span><strong id="monthOverdue">R$ 0,00</strong></article>
+        </div>
+
+        <div class="toolbar">
+          <label class="search-field"><span aria-hidden="true">⌕</span><input id="paymentSearch" type="search" placeholder="Buscar fornecedor ou descrição" /></label>
+          <div class="segmented" id="statusFilters" aria-label="Filtrar pagamentos">
+            <button class="is-active" type="button" data-filter="all">Todas</button>
+            <button type="button" data-filter="pending">Pendentes</button>
+            <button type="button" data-filter="paid">Pagas</button>
+            <button type="button" data-filter="overdue">Atrasadas</button>
+          </div>
+          <div class="toolbar-end">
+            <div class="segmented icon-segmented" aria-label="Modo de visualização">
+              <button class="is-active" type="button" data-view="list" title="Lista">Lista</button>
+              <button type="button" data-view="calendar" title="Calendário">Calendário</button>
+            </div>
+            <button class="button secondary compact" id="csvButton" type="button">Exportar CSV</button>
+            <button class="button secondary compact" id="printButton" type="button">Imprimir relatório</button>
+          </div>
+        </div>
+
+        <div class="payment-view is-active" id="listView">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Vencimento</th><th>Fornecedor</th><th>Conta</th><th>Previsto</th><th>Pago</th><th>Situação</th><th></th></tr></thead>
+              <tbody id="paymentTableBody"></tbody>
+            </table>
+          </div>
+          <div class="empty-state" id="paymentEmpty" hidden>Nenhuma conta encontrada neste mês.</div>
+        </div>
+        <div class="payment-view" id="calendarView">
+          <div class="calendar-weekdays"><span>Dom</span><span>Seg</span><span>Ter</span><span>Qua</span><span>Qui</span><span>Sex</span><span>Sáb</span></div>
+          <div class="calendar-grid" id="calendarGrid"></div>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="vendorsPanel" data-panel="vendors">
+        <div class="section-heading"><div><p class="eyebrow">Contratos</p><h1>Fornecedores</h1></div><button class="button primary" type="button" id="newVendorButtonSecondary">+ Novo fornecedor</button></div>
+        <div class="toolbar"><label class="search-field"><span aria-hidden="true">⌕</span><input id="vendorSearch" type="search" placeholder="Buscar fornecedor, categoria ou contato" /></label><select id="vendorSort" aria-label="Ordenar fornecedores"><option value="name">Nome</option><option value="pending">Maior saldo</option><option value="next">Próximo vencimento</option><option value="total">Maior contrato</option></select></div>
+        <div class="vendor-list" id="vendorList"></div>
+        <div class="empty-state" id="vendorEmpty" hidden>Nenhum fornecedor cadastrado.</div>
+      </section>
+
+      <section class="tab-panel" id="overviewPanel" data-panel="overview">
+        <div class="section-heading"><div><p class="eyebrow">Planejamento</p><h1>Resumo geral</h1></div></div>
+        <div class="overview-grid">
+          <section class="content-section"><h2>Progresso do orçamento</h2><div class="progress-track"><span id="progressBar"></span></div><p id="progressText"></p></section>
+          <section class="content-section"><h2>Por categoria</h2><div id="categorySummary" class="breakdown-list"></div></section>
+          <section class="content-section wide"><h2>Projeção por mês</h2><div id="monthlyProjection" class="projection"></div></section>
+        </div>
+      </section>
+
+      <section class="tab-panel report-panel" id="reportPanel" data-panel="report">
+        <div class="section-heading">
+          <div><p class="eyebrow">Prestação de contas</p><h1>Relatório total por fornecedor</h1></div>
+          <div class="report-actions">
+            <label class="report-total-toggle"><input id="reportShowGrandTotal" type="checkbox" checked /><span>Mostrar total geral no final</span></label>
+            <button class="button secondary compact" id="reportCsvButton" type="button">Exportar CSV</button>
+            <button class="button secondary compact" id="reportPrintButton" type="button">Imprimir relatório</button>
+          </div>
+        </div>
+        <div class="report-header">
+          <div><strong>Leonardo &amp; Bruna</strong><span>Posição completa dos contratos e pagamentos</span></div>
+          <span id="reportGeneratedAt"></span>
+        </div>
+        <div class="report-summary">
+          <article><span>Total contratado</span><strong id="reportContracted">R$ 0,00</strong></article>
+          <article><span>Total pago</span><strong id="reportPaid">R$ 0,00</strong></article>
+          <article><span>Total a pagar</span><strong id="reportPending">R$ 0,00</strong></article>
+        </div>
+        <div class="table-wrap report-table-wrap">
+          <table class="report-table">
+            <thead><tr><th>Fornecedor</th><th>Valor contratado</th><th>Pagamentos realizados</th><th>Total pago</th><th>Falta pagar</th></tr></thead>
+            <tbody id="reportTableBody"></tbody>
+            <tfoot id="reportTableFoot"></tfoot>
+          </table>
+        </div>
+      </section>
+
+      <section class="tab-panel" id="settingsPanel" data-panel="settings">
+        <div class="section-heading"><div><p class="eyebrow">Armazenamento local</p><h1>Dados e backup</h1></div></div>
+        <div class="settings-grid">
+          <section class="content-section"><h2>Onde os dados ficam</h2><p id="storageDescription">As alterações são gravadas automaticamente neste navegador.</p><dl><div><dt>Última gravação</dt><dd id="lastSaved">-</dd></div><div><dt>Fornecedores</dt><dd id="vendorCount">0</dd></div></dl></section>
+          <section class="content-section"><h2>Backup portátil</h2><p>Baixe uma cópia completa para guardar em outro local ou restaurar depois.</p><div class="button-row"><button class="button secondary" type="button" id="backupButtonSecondary">Baixar JSON</button><button class="button secondary" type="button" id="importButton">Importar JSON</button><input id="importInput" type="file" accept="application/json,.json" hidden /></div></section>
+          <section class="content-section danger-zone"><h2>Zona de cuidado</h2><p>Apaga todos os fornecedores e pagamentos do arquivo local.</p><button class="button danger" type="button" id="clearButton">Apagar todos os dados</button></section>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="vendorDialog">
+      <form method="dialog" id="vendorForm" class="dialog-form">
+        <header><div><p class="eyebrow">Contrato</p><h2 id="vendorDialogTitle">Novo fornecedor</h2></div><button class="icon-button" value="cancel" aria-label="Fechar" type="submit">×</button></header>
+        <input id="vendorId" type="hidden" />
+        <div class="form-grid">
+          <label class="span-2">Fornecedor<input id="vendorName" required placeholder="Ex: Buffet Primavera" /></label>
+          <label>Categoria<select id="vendorCategory"><option>Buffet</option><option>Decoração</option><option>Fotografia</option><option>Espaço</option><option>Música</option><option>Trajes</option><option>Beleza</option><option>Convites</option><option>Transporte</option><option>Outros</option></select></label>
+          <label>Status<select id="vendorStatus"><option value="contracted">Contratado</option><option value="quote">Cotação</option><option value="completed">Concluído</option><option value="cancelled">Cancelado</option></select></label>
+          <label class="span-2">Descrição<textarea id="vendorDescription" rows="2" placeholder="Serviço contratado"></textarea></label>
+          <label>Contato<input id="vendorContact" placeholder="Nome ou telefone" /></label>
+          <label>Valor total<input id="vendorTotal" type="number" min="0" step="0.01" required /></label>
+          <label>Entrada<input id="vendorDeposit" type="number" min="0" step="0.01" value="0" /></label>
+          <label>Vencimento da entrada<input id="vendorDepositDate" type="date" /></label>
+          <label>Valor da parcela<input id="vendorInstallmentValue" type="number" min="0" step="0.01" value="0" /></label>
+          <label>Quantidade<input id="vendorInstallments" type="number" min="0" step="1" value="0" /></label>
+          <label>Primeira parcela<input id="vendorFirstInstallment" type="month" /></label>
+          <label>Dia do vencimento<input id="vendorDueDay" type="number" min="1" max="31" value="10" /></label>
+          <label class="span-2">Observações<textarea id="vendorNotes" rows="2"></textarea></label>
+        </div>
+        <footer><button class="button secondary" value="cancel" type="submit">Cancelar</button><button class="button primary" id="saveVendorButton" value="default" type="submit">Salvar fornecedor</button></footer>
+      </form>
+    </dialog>
+
+    <dialog id="paymentDialog">
+      <form method="dialog" id="paymentForm" class="dialog-form compact-form">
+        <header><div><p class="eyebrow">Pagamento</p><h2 id="paymentDialogTitle">Registrar pagamento</h2></div><button class="icon-button" value="cancel" aria-label="Fechar" type="submit">×</button></header>
+        <input id="paymentId" type="hidden" /><input id="paymentVendorId" type="hidden" />
+        <div class="payment-context" id="paymentContext"></div>
+        <div class="form-grid">
+          <label>Vencimento<input id="paymentDueDate" type="date" required /></label>
+          <label>Valor previsto<input id="paymentExpected" type="number" min="0" step="0.01" required /></label>
+          <label>Situação<select id="paymentStatus"><option value="pending">Pendente</option><option value="paid">Pago</option><option value="partial">Parcial</option></select></label>
+          <label>Valor pago<input id="paymentPaidAmount" type="number" min="0" step="0.01" /></label>
+          <label>Data do pagamento<input id="paymentPaidDate" type="date" /></label>
+          <label>Forma de pagamento<select id="paymentMethod"><option value="">Não informada</option><option>Pix</option><option>Transferência</option><option>Cartão</option><option>Dinheiro</option><option>Boleto</option><option>Outro</option></select></label>
+          <label class="span-2">Observação<textarea id="paymentNotes" rows="2"></textarea></label>
+        </div>
+        <footer><button class="button secondary" value="cancel" type="submit">Cancelar</button><button class="button primary" id="savePaymentButton" value="default" type="submit">Salvar pagamento</button></footer>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="script.js?v=2"></script>
+  </body>
+</html>

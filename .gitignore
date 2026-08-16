@@ -1,0 +1,6 @@
+.server.pid
+.pages-test.pid
+data/*.tmp
+relatorios/*.csv
+relatorios/*.json
+backups/

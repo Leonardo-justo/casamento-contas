@@ -1,0 +1,14 @@
+{
+  "name": "casamento-contas",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Controle local das contas do casamento de Leonardo e Bruna",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "check": "node --check server.js && node --check script.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
