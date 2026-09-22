@@ -5,9 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#8f352c" />
     <title>Contas do casamento | Leonardo & Bruna</title>
-    <link rel="stylesheet" href="styles.css?v=2" />
+    <link rel="stylesheet" href="styles.css?v=4" />
   </head>
-  <body>
+  <body class="auth-locked">
+    <section class="login-gate" id="loginGate" aria-labelledby="loginTitle">
+      <form class="login-card" id="loginForm">
+        <span class="login-mark" aria-hidden="true">L&B</span>
+        <p class="eyebrow">Acesso restrito</p>
+        <h1 id="loginTitle">Contas do casamento</h1>
+        <label for="loginPassword">Senha</label>
+        <div class="login-row">
+          <input id="loginPassword" type="password" autocomplete="current-password" required />
+          <button class="button primary" type="submit">Entrar</button>
+        </div>
+        <p class="login-error" id="loginError" role="alert" aria-live="polite"></p>
+      </form>
+    </section>
+
     <header class="app-header">
       <div class="header-inner">
         <div class="brand">
@@ -183,7 +197,20 @@
       </form>
     </dialog>
 
+    <dialog id="extraDialog">
+      <form method="dialog" id="extraForm" class="dialog-form compact-form">
+        <header><div><p class="eyebrow">Acréscimo</p><h2>Adicionar valor extra</h2></div><button class="icon-button" value="cancel" aria-label="Fechar" type="submit">×</button></header>
+        <input id="extraVendorId" type="hidden" />
+        <div class="payment-context" id="extraContext"></div>
+        <div class="form-grid">
+          <label>Valor extra<input id="extraAmount" type="number" min="0.01" step="0.01" required /></label>
+          <label class="span-2">Observação<textarea id="extraNotes" rows="3" required placeholder="Motivo ou descrição do valor extra"></textarea></label>
+        </div>
+        <footer><button class="button secondary" value="cancel" type="submit">Cancelar</button><button class="button primary" value="default" type="submit">Adicionar extra</button></footer>
+      </form>
+    </dialog>
+
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="script.js?v=2"></script>
+    <script src="script.js?v=4"></script>
   </body>
 </html>

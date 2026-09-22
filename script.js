@@ -1,5 +1,7 @@
 const LEGACY_STORAGE_KEY = "casamento-leonardo-bruna-contas";
 const LOCAL_CACHE_KEY = "casamento-contas-v2-cache";
+const ACCESS_KEY = "casamento-contas-access";
+const ACCESS_PASSWORD = "casamento2026";
 const API_URL = "/api/data";
 const IS_STATIC_HOST = location.protocol === "file:" || location.hostname.endsWith("github.io") || new URLSearchParams(location.search).has("static");
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -12,11 +14,46 @@ let paymentFilter = "all";
 let paymentView = "list";
 let storageMode = IS_STATIC_HOST ? "browser" : "server";
 let saveTimer;
+const expandedVendorIds = new Set();
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
-document.addEventListener("DOMContentLoaded", init);
+document.addEventListener("DOMContentLoaded", initLoginGate);
+
+function initLoginGate() {
+  const gate = $("#loginGate");
+  const form = $("#loginForm");
+  const passwordInput = $("#loginPassword");
+  const error = $("#loginError");
+
+  const unlock = () => {
+    sessionStorage.setItem(ACCESS_KEY, "granted");
+    document.body.classList.remove("auth-locked");
+    document.body.classList.add("auth-unlocked");
+    gate.setAttribute("aria-hidden", "true");
+    init();
+  };
+
+  if (sessionStorage.getItem(ACCESS_KEY) === "granted") {
+    unlock();
+    return;
+  }
+
+  passwordInput.focus();
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+
+    if (passwordInput.value === ACCESS_PASSWORD) {
+      unlock();
+      return;
+    }
+
+    error.textContent = "Senha incorreta. Tente novamente.";
+    passwordInput.value = "";
+    passwordInput.focus();
+  });
+}
 
 async function init() {
   bindEvents();
@@ -100,6 +137,7 @@ function normalizeVendor(vendor) {
     contact: vendor.contact || "",
     notes: vendor.notes || "",
     total: number(vendor.total),
+    extraCharges: Array.isArray(vendor.extraCharges) ? vendor.extraCharges.map((extra) => ({ id: extra.id || crypto.randomUUID(), amount: number(extra.amount), notes: extra.notes || "", createdAt: extra.createdAt || new Date().toISOString() })) : [],
     deposit: vendor.noDeposit ? 0 : number(vendor.deposit),
     depositDate: vendor.depositDate || vendor.depositPaidDate || "",
     installmentValue: number(vendor.installmentValue),
@@ -137,6 +175,7 @@ function bindEvents() {
   ["#newVendorButton", "#newVendorButtonSecondary"].forEach((selector) => $(selector).addEventListener("click", () => openVendorDialog()));
   $("#vendorForm").addEventListener("submit", handleVendorSubmit);
   $("#paymentForm").addEventListener("submit", handlePaymentSubmit);
+  $("#extraForm").addEventListener("submit", handleExtraSubmit);
   $("#paymentStatus").addEventListener("change", syncPaymentForm);
   $("#paymentTableBody").addEventListener("click", handlePaymentClick);
   $("#calendarGrid").addEventListener("click", handlePaymentClick);
@@ -170,7 +209,7 @@ function render() {
 
 function renderSummary() {
   const payments = allPayments();
-  const contracted = appData.vendors.filter((vendor) => vendor.status !== "cancelled").reduce((sum, vendor) => sum + vendor.total, 0);
+  const contracted = appData.vendors.filter((vendor) => vendor.status !== "cancelled").reduce((sum, vendor) => sum + vendorContractedTotal(vendor), 0);
   const paid = payments.reduce((sum, payment) => sum + payment.paidAmount, 0);
   const pending = Math.max(0, contracted - paid);
   const next = payments.filter((payment) => payment.status !== "paid").sort(sortPayments)[0];
@@ -241,20 +280,39 @@ function renderVendors() {
   const sort = $("#vendorSort").value;
   const vendors = appData.vendors.filter((vendor) => !query || normalizeText(`${vendor.name} ${vendor.category} ${vendor.contact}`).includes(query));
   vendors.sort((a, b) => {
-    if (sort === "total") return b.total - a.total;
+    if (sort === "total") return vendorContractedTotal(b) - vendorContractedTotal(a);
     if (sort === "pending") return vendorPending(b) - vendorPending(a);
     if (sort === "next") return (nextVendorPayment(a)?.dueDate || "9999") .localeCompare(nextVendorPayment(b)?.dueDate || "9999");
     return a.name.localeCompare(b.name, "pt-BR");
   });
   $("#vendorList").innerHTML = vendors.map((vendor) => {
-    const paid = vendorPayments(vendor).reduce((sum, payment) => sum + payment.paidAmount, 0);
+    const payments = vendorPayments(vendor);
+    const paid = payments.reduce((sum, payment) => sum + payment.paidAmount, 0);
+    const extraTotal = vendorExtraTotal(vendor);
     const next = nextVendorPayment(vendor);
-    return `<article class="vendor-card">
-      <div class="vendor-title"><span class="category-swatch"></span><div><h3>${h(vendor.name)}</h3><p>${h(vendor.category)} · ${h(vendorStatusLabel(vendor.status))}${vendor.contact ? ` · ${h(vendor.contact)}` : ""}</p></div></div>
-      <div class="vendor-stat"><span>Contrato</span><strong>${currency.format(vendor.total)}</strong></div>
-      <div class="vendor-stat"><span>Já pago</span><strong>${currency.format(paid)}</strong></div>
-      <div class="vendor-stat"><span>Próximo</span><strong>${next ? formatDate(next.dueDate) : "-"}</strong></div>
-      <div class="vendor-actions"><button class="row-action" data-vendor-action="edit" data-vendor-id="${h(vendor.id)}">Editar</button><button class="row-action" data-vendor-action="delete" data-vendor-id="${h(vendor.id)}">Excluir</button></div>
+    const isExpanded = expandedVendorIds.has(vendor.id);
+    const installmentRows = payments.map((payment) => `<tr>
+      <td class="date-cell"><strong>${formatDate(payment.dueDate)}</strong><small>${h(payment.label)}</small></td>
+      <td class="money">${currency.format(payment.expectedAmount)}</td>
+      <td class="money">${payment.paidAmount ? currency.format(payment.paidAmount) : "-"}</td>
+      <td><span class="status-badge ${payment.displayStatus}">${statusLabel(payment.displayStatus)}</span></td>
+      <td class="installment-note">${payment.notes ? h(payment.notes) : "-"}</td>
+      <td class="action-cell"><button class="row-action" type="button" data-payment-id="${h(payment.id)}" data-vendor-id="${h(vendor.id)}">Editar</button></td>
+    </tr>`).join("");
+    return `<article class="vendor-card ${isExpanded ? "is-expanded" : ""}">
+      <div class="vendor-summary">
+        <div class="vendor-title"><span class="category-swatch"></span><div><h3>${h(vendor.name)}</h3><p>${h(vendor.category)} · ${h(vendorStatusLabel(vendor.status))}${vendor.contact ? ` · ${h(vendor.contact)}` : ""}</p></div></div>
+        <div class="vendor-stat"><span>Total com extras</span><strong>${currency.format(vendorContractedTotal(vendor))}</strong>${extraTotal ? `<small>+ ${currency.format(extraTotal)} em extras</small>` : ""}</div>
+        <div class="vendor-stat"><span>Já pago</span><strong>${currency.format(paid)}</strong></div>
+        <div class="vendor-stat"><span>Próximo</span><strong>${next ? formatDate(next.dueDate) : "-"}</strong></div>
+        <div class="vendor-actions"><button class="row-action vendor-toggle" type="button" data-vendor-action="toggle" data-vendor-id="${h(vendor.id)}" aria-expanded="${isExpanded}">${isExpanded ? "Ocultar parcelas" : "Ver parcelas"}</button><button class="row-action" type="button" data-vendor-action="edit" data-vendor-id="${h(vendor.id)}">Editar</button><button class="row-action" type="button" data-vendor-action="delete" data-vendor-id="${h(vendor.id)}">Excluir</button></div>
+      </div>
+      <div class="vendor-details" ${isExpanded ? "" : "hidden"}>
+        <div class="vendor-observation"><strong>Observação</strong><p>${vendor.notes ? h(vendor.notes) : "Nenhuma observação cadastrada."}</p></div>
+        <div class="vendor-extra-heading"><strong>Valores extras</strong><button class="row-action" type="button" data-vendor-action="add-extra" data-vendor-id="${h(vendor.id)}">+ Adicionar extra</button></div>
+        <div class="vendor-extra-list">${vendor.extraCharges.length ? vendor.extraCharges.map((extra) => `<div class="vendor-extra-item"><div><strong>${currency.format(extra.amount)}</strong><p>${h(extra.notes)}</p></div><button class="row-action" type="button" data-vendor-action="delete-extra" data-vendor-id="${h(vendor.id)}" data-extra-id="${h(extra.id)}">Excluir</button></div>`).join("") : '<p class="vendor-no-extras">Nenhum valor extra cadastrado.</p>'}</div>
+        ${payments.length ? `<div class="vendor-installments"><table><thead><tr><th>Vencimento</th><th>Valor</th><th>Pago</th><th>Situação</th><th>Observação</th><th></th></tr></thead><tbody>${installmentRows}</tbody></table></div>` : '<p class="vendor-no-installments">Nenhuma parcela cadastrada.</p>'}
+      </div>
     </article>`;
   }).join("");
   $("#vendorEmpty").hidden = vendors.length > 0;
@@ -262,12 +320,12 @@ function renderVendors() {
 
 function renderOverview() {
   const payments = allPayments();
-  const total = appData.vendors.filter((vendor) => vendor.status !== "cancelled").reduce((sum, vendor) => sum + vendor.total, 0);
+  const total = appData.vendors.filter((vendor) => vendor.status !== "cancelled").reduce((sum, vendor) => sum + vendorContractedTotal(vendor), 0);
   const paid = payments.reduce((sum, payment) => sum + payment.paidAmount, 0);
   const percent = total ? Math.min(100, Math.round((paid / total) * 100)) : 0;
   $("#progressBar").style.width = `${percent}%`;
   $("#progressText").textContent = `${percent}% pago · ${currency.format(Math.max(0, total - paid))} ainda previstos`;
-  const categories = appData.vendors.reduce((map, vendor) => ((map[vendor.category] = (map[vendor.category] || 0) + vendor.total), map), {});
+  const categories = appData.vendors.reduce((map, vendor) => ((map[vendor.category] = (map[vendor.category] || 0) + vendorContractedTotal(vendor)), map), {});
   const maxCategory = Math.max(1, ...Object.values(categories));
   $("#categorySummary").innerHTML = Object.entries(categories).sort((a, b) => b[1] - a[1]).map(([name, value]) => `<div class="breakdown-row"><span>${h(name)}</span><strong>${currency.format(value)}</strong><div><span style="width:${(value / maxCategory) * 100}%"></span></div></div>`).join("") || "<p>Nenhum dado ainda.</p>";
   const byMonth = allPayments().reduce((map, payment) => { const key = payment.dueDate.slice(0, 7); map[key] = (map[key] || 0) + payment.expectedAmount; return map; }, {});
@@ -305,7 +363,8 @@ function totalReportRows() {
         .filter((payment) => payment.paidAmount > 0)
         .sort((a, b) => (a.paidDate || a.dueDate).localeCompare(b.paidDate || b.dueDate));
       const paid = history.reduce((sum, payment) => sum + payment.paidAmount, 0);
-      return { vendor, contracted: vendor.total, history, paid, pending: Math.max(0, vendor.total - paid) };
+      const contracted = vendorContractedTotal(vendor);
+      return { vendor, contracted, history, paid, pending: Math.max(0, contracted - paid) };
     })
     .sort((a, b) => a.vendor.name.localeCompare(b.vendor.name, "pt-BR"));
 }
@@ -382,15 +441,58 @@ async function handleVendorSubmit(event) {
 }
 
 function handleVendorClick(event) {
+  const paymentButton = event.target.closest("button[data-payment-id]");
+  if (paymentButton) {
+    openPaymentDialog(paymentButton.dataset.vendorId, paymentButton.dataset.paymentId);
+    return;
+  }
   const button = event.target.closest("button[data-vendor-action]");
   if (!button) return;
   const vendor = appData.vendors.find((item) => item.id === button.dataset.vendorId);
   if (!vendor) return;
+  if (button.dataset.vendorAction === "toggle") {
+    if (expandedVendorIds.has(vendor.id)) expandedVendorIds.delete(vendor.id);
+    else expandedVendorIds.add(vendor.id);
+    renderVendors();
+  }
+  if (button.dataset.vendorAction === "add-extra") openExtraDialog(vendor.id);
+  if (button.dataset.vendorAction === "delete-extra") deleteVendorExtra(vendor.id, button.dataset.extraId);
   if (button.dataset.vendorAction === "edit") openVendorDialog(vendor.id);
   if (button.dataset.vendorAction === "delete" && confirm(`Excluir ${vendor.name} e todos os pagamentos relacionados?`)) {
     appData.vendors = appData.vendors.filter((item) => item.id !== vendor.id);
     saveData({ message: "Fornecedor excluído" }).then(render);
   }
+}
+
+function openExtraDialog(vendorId) {
+  const vendor = appData.vendors.find((item) => item.id === vendorId);
+  if (!vendor) return;
+  $("#extraVendorId").value = vendor.id;
+  $("#extraContext").innerHTML = `<strong>${h(vendor.name)}</strong><br>O valor será acrescentado ao total contratado.`;
+  $("#extraAmount").value = "";
+  $("#extraNotes").value = "";
+  $("#extraDialog").showModal();
+}
+
+async function handleExtraSubmit(event) {
+  event.preventDefault();
+  if (event.submitter?.value === "cancel") return $("#extraDialog").close();
+  if (!event.currentTarget.reportValidity()) return;
+  const vendor = appData.vendors.find((item) => item.id === $("#extraVendorId").value);
+  if (!vendor) return;
+  vendor.extraCharges.push({ id: crypto.randomUUID(), amount: number($("#extraAmount").value), notes: $("#extraNotes").value.trim(), createdAt: new Date().toISOString() });
+  $("#extraDialog").close();
+  await saveData({ message: "Valor extra adicionado" });
+  render();
+}
+
+async function deleteVendorExtra(vendorId, extraId) {
+  const vendor = appData.vendors.find((item) => item.id === vendorId);
+  const extra = vendor?.extraCharges.find((item) => item.id === extraId);
+  if (!vendor || !extra || !confirm(`Excluir o valor extra de ${currency.format(extra.amount)}?`)) return;
+  vendor.extraCharges = vendor.extraCharges.filter((item) => item.id !== extraId);
+  await saveData({ message: "Valor extra excluído" });
+  render();
 }
 
 function handlePaymentClick(event) {
@@ -534,7 +636,9 @@ function monthWithMostRelevantPayment() {
   return pending ? startOfMonth(dateFromIso(pending.dueDate)) : null;
 }
 function nextVendorPayment(vendor) { return vendorPayments(vendor).filter((payment) => payment.status !== "paid").sort(sortPayments)[0]; }
-function vendorPending(vendor) { return Math.max(0, vendor.total - vendorPayments(vendor).reduce((sum, payment) => sum + payment.paidAmount, 0)); }
+function vendorExtraTotal(vendor) { return vendor.extraCharges.reduce((sum, extra) => sum + extra.amount, 0); }
+function vendorContractedTotal(vendor) { return vendor.total + vendorExtraTotal(vendor); }
+function vendorPending(vendor) { return Math.max(0, vendorContractedTotal(vendor) - vendorPayments(vendor).reduce((sum, payment) => sum + payment.paidAmount, 0)); }
 function changeMonth(offset) { setMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + offset, 1)); }
 function setMonth(date) { currentMonth = startOfMonth(date); renderMonth(); }
 function sortPayments(a, b) { return a.dueDate.localeCompare(b.dueDate) || a.vendorName.localeCompare(b.vendorName, "pt-BR"); }
